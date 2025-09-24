@@ -1,20 +1,8 @@
-/*
- *    Copyright (C) 2014 Haruki Hasegawa
- *
- *    Licensed under the Apache License, Version 2.0 (the "License");
- *    you may not use this file except in compliance with the License.
- *    You may obtain a copy of the License at
- *
- *        http://www.apache.org/licenses/LICENSE-2.0
- *
- *    Unless required by applicable law or agreed to in writing, software
- *    distributed under the License is distributed on an "AS IS" BASIS,
- *    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *    See the License for the specific language governing permissions and
- *    limitations under the License.
- */
+// groovy
+import java.util.Properties
+import java.io.File
 
-apply plugin: 'maven'
+apply plugin: 'maven-publish'
 apply plugin: 'signing'
 
 // Declare these properties in project's extension
@@ -26,7 +14,7 @@ def repoDir = project.mavenPublishDestDir
 def dataProps = new Properties()
 dataProps.load(project.file(project.mavenPublishDataFile).newDataInputStream())
 
-def doclavaProjPath =  project.path + ':doclava'
+def doclavaProjPath = project.path + ':doclava'
 def optUseDoclava = project.useDoclava
 
 task cleanDocsOutDir(type: Delete) {
@@ -34,8 +22,8 @@ task cleanDocsOutDir(type: Delete) {
 }
 
 task androidJavadocs(
-    type: Javadoc, 
-    dependsOn: [ doclavaProjPath + ':download', cleanDocsOutDir ]) {
+        type: Javadoc,
+        dependsOn: [ doclavaProjPath + ':download', cleanDocsOutDir ]) {
 
     source = android.sourceSets.main.java.srcDirs
     classpath += project.files(android.getBootClasspath().join(File.pathSeparator))
@@ -44,8 +32,7 @@ task androidJavadocs(
     options.encoding "utf-8"
 
     if (optUseDoclava) {
-        title = ""  // This is required to avoid Doclava error: "javadoc: error - invalid flag: -doctitle"
-
+        title = ""  // avoid Doclava error
         options.bootClasspath new File(System.getenv('JAVA_HOME') + "/jre/lib/rt.jar")
         options.docletpath = [ project.file('./doclava/build/libs/doclava.jar') ]
         options.doclet 'com.google.doclava.Doclava'
@@ -56,88 +43,97 @@ task androidJavadocs(
 }
 
 task androidJavadocsJar(type: Jar, dependsOn: androidJavadocs) {
-    classifier = 'javadoc'
+    archiveClassifier  = 'javadoc'
     from androidJavadocs.destinationDir
 }
 
 task androidSourcesJar(type: Jar) {
-    classifier = 'sources'
+    archiveClassifier  = 'sources'
     from android.sourceSets.main.java.srcDirs
 }
 
+// Load signing properties (keyId, password, secretKeyRingFile)
 signing {
-    // load 'keyId', 'password' and 'secretKeyRingFile' 
     def propsFile = project.file(project.mavenPublishSigningSetting)
-
     if (propsFile.exists()) {
         def props = new Properties()
         props.load(propsFile.newDataInputStream())
-
-        if (props.keyId != null && 
-            props.password != null && 
-            props.secretKeyRingFile != null) {
-            project.ext.keyId = props.keyId
-            project.ext.password  = props.password
-            project.ext.secretKeyRingFile = props.secretKeyRingFile
+        if (props.keyId && props.password && props.secretKeyRingFile) {
+            ext['signing.keyId'] = props.keyId
+            ext['signing.password'] = props.password
+            ext['signing.secretKeyRingFile'] = props.secretKeyRingFile
         }
     }
-
-    required { gradle.taskGraph.hasTask("uploadArchives") }
-    sign configurations.archives
+    // Require signing when any publish task runs
+    required { gradle.taskGraph.allTasks.any { it.name.startsWith('publish') } }
 }
 
-uploadArchives {
-    repositories.mavenDeployer {
-        beforeDeployment { MavenDeployment deployment -> signing.signPom(deployment) }
-
-        repository(url: "file://${repoDir}")
-
-        pom.groupId = dataProps.POM_GROUP_ID
-        pom.artifactId = dataProps.POM_ARTIFACT_ID
-        pom.version = dataProps.VERSION_NAME
-        pom.project {
-            licenses {
-                license {
-                    name dataProps.POM_APACHE_V2_LICENCE_NAME
-                    url dataProps.POM_APACHE_V2_LICENCE_URL
-                    distribution dataProps.POM_APACHE_V2_LICENCE_DIST
-                    comments "OpenSLMediaPlayer"
-                }
-                license {
-                    name dataProps.POM_APACHE_V2_LICENCE_NAME
-                    url dataProps.POM_APACHE_V2_LICENCE_URL
-                    distribution dataProps.POM_APACHE_V2_LICENCE_DIST
-                    comments "[dependent libraries] cxxdasp, cxxporthelper, OpenSL ES CXX"
-                }
-                license {
-                    name dataProps.POM_FFTPACK5_LICENCE_NAME
-                    url dataProps.POM_FFTPACK5_LICENCE_URL
-                    distribution dataProps.POM_FFTPACK5_LICENCE_DIST
-                    comments "[dependent library] PFFFT"
-                }
-                license {
-                    name dataProps.POM_BSD_3_CLAUSE_LICENCE_NAME
-                    url dataProps.POM_BSD_3_CLAUSE_LICENCE_URL
-                    distribution dataProps.POM_BSD_3_CLAUSE_LICENCE_DIST
-                    comments "[dependent library] Ne10"
-                }
+publishing {
+    publications {
+        release(MavenPublication) {
+            if (plugins.hasPlugin('com.android.library')) {
+                from components.findByName("release")
             }
-            scm {
-                url dataProps.POM_SCM_URL
-                connection dataProps.POM_SCM_CONNECTION
-                developerConnection dataProps.POM_SCM_DEVELOPER_CONNECTION
-            }
-            developers {
-                developer {
-                    id dataProps.POM_DEVELOPER_ID
-                    name dataProps.POM_DEVELOPER_NAME
+
+            groupId = dataProps.POM_GROUP_ID
+            artifactId = dataProps.POM_ARTIFACT_ID
+            version = dataProps.VERSION_NAME
+
+            // attach sources and javadocs jars
+            artifact androidSourcesJar
+            artifact androidJavadocsJar
+
+            pom {
+                licenses {
+                    license {
+                        name = dataProps.POM_APACHE_V2_LICENCE_NAME
+                        url =  dataProps.POM_APACHE_V2_LICENCE_URL
+                        distribution = dataProps.POM_APACHE_V2_LICENCE_DIST
+                        comments = "OpenSLMediaPlayer"
+                    }
+                    license {
+                        name = dataProps.POM_APACHE_V2_LICENCE_NAME
+                        url = dataProps.POM_APACHE_V2_LICENCE_URL
+                        distribution = dataProps.POM_APACHE_V2_LICENCE_DIST
+                        comments = "[dependent libraries] cxxdasp, cxxporthelper, OpenSL ES CXX"
+                    }
+                    license {
+                        name = dataProps.POM_FFTPACK5_LICENCE_NAME
+                        url = dataProps.POM_FFTPACK5_LICENCE_URL
+                        distribution = dataProps.POM_FFTPACK5_LICENCE_DIST
+                        comments = "[dependent library] PFFFT"
+                    }
+                    license {
+                        name = dataProps.POM_BSD_3_CLAUSE_LICENCE_NAME
+                        url = dataProps.POM_BSD_3_CLAUSE_LICENCE_URL
+                        distribution = dataProps.POM_BSD_3_CLAUSE_LICENCE_DIST
+                        comments = "[dependent library] Ne10"
+                    }
+                }
+                scm {
+                    url = dataProps.POM_SCM_URL
+                    connection = dataProps.POM_SCM_CONNECTION
+                    developerConnection = dataProps.POM_SCM_DEVELOPER_CONNECTION
+                }
+                developers {
+                    developer {
+                        id = dataProps.POM_DEVELOPER_ID
+                        name = dataProps.POM_DEVELOPER_NAME
+                    }
                 }
             }
         }
     }
+    repositories {
+        maven {
+            url = uri("file://${repoDir}")
+        }
+    }
 }
 
-artifacts {
-    archives androidSourcesJar
-    archives androidJavadocsJar
+// Sign all publications after they are configured
+afterEvaluate {
+    signing {
+        sign publishing.publications
+    }
 }

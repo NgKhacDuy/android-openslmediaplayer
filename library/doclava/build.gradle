@@ -21,11 +21,11 @@ repositories {
 }
 
 dependencies {
-    compile 'com.google.doclava:doclava:1.0.6'
+    implementation 'com.google.doclava:doclava:1.0.6'
 }
 
 task download(type: Copy) {
-    from configurations.compile
+    from configurations.implementation
     into 'build/libs'
 
     // "doclava-1.0.6.jar" -> "doclava.jar"

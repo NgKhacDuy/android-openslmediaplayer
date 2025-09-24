@@ -61,10 +61,10 @@ if (loadSigningConfigFromPropertiesFile(
 
 
 dependencies {
-    compile fileTree(include: ['*.jar'], dir: 'libs')
-    compile 'com.android.support:support-v4:25.3.1'
-    compile 'com.android.support:appcompat-v7:25.3.1'
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation 'com.android.support:support-v4:25.3.1'
+    implementation 'com.android.support:appcompat-v7:25.3.1'
 
 
-    compile project(path: ':library')
+    implementation project(path: ':library')
 }
